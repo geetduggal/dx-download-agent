@@ -5,7 +5,7 @@ CLI tool to manage the download of large quantities of files from DNAnexus
 
 ## Quick Start
 
-To get started with `dx-download-agent`, download the the latest pre-compiled binary from the release page.  The download agent accepts two files with the following name:
+To get started with `dx-download-agent`, download the the latest pre-compiled binary from the release page.  The download agent accepts two files:
 
 * `manifest_file`: A YAML manifest file that describes, at minimimum, a list of DNAnexus file IDs to download
 * `execution_params`: A YAML file describing parameters used for a particular execution of the download agent
@@ -13,16 +13,17 @@ To get started with `dx-download-agent`, download the the latest pre-compiled bi
 For example, in the current working directory let `manifest.yaml` be:
 
 ```yaml
-- id: file-XXXX
-- id: file-YYYY
-- id: file-ZZZZ
+project: project-XXXX
+files:
+  - id: file-XXXX
+  - id: file-YYYY
+  - id: file-ZZZZ
 ```
 and let `execution.yaml` be:
 
 ```yaml
 # If no execution YAML is provided, defaults are used.
 # See "Execution file format" section below for more information
-
 preserve_project_paths: true  # Mimics directory structure in project locally
 max_threads: 4
 max_bandwidth: 50 # KBp/s
@@ -110,9 +111,11 @@ After, for example, a system reboot, the user may wish to manually check on the 
 
 The manifest file is a YAML file that is a list of dictionaries. Each dictionary item must have an `id` field at minimum as in the example above, but each item can also have other metadata:
 
-* `id` (required): DNAnexus file ID
-* `name`: File name on DNAnexus (used by `status` command)
-* `desired_local_path`: Desired local path
+* `project`: project ID from which files are to be downloaded
+* `files`: list of dictionaries:
+  * `id` (required): DNAnexus file ID
+  * `name`: File name on DNAnexus (used by `status` command)
+  * `desired_local_path`: Desired local path
 * ...
 
 ## Execution file format
