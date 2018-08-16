@@ -13,11 +13,13 @@ To get started with `dx-download-agent`, download the the latest pre-compiled bi
 For example, in the current working directory let `manifest.yaml` be:
 
 ```yaml
-project: project-XXXX
-files:
-  - id: file-XXXX
+- project-AAAA:
+  - id: file-XXXX 
   - id: file-YYYY
   - id: file-ZZZZ
+- project-BBBB:
+  - id: file-QQQQ
+
 ```
 and let `execution.yaml` be:
 
@@ -36,6 +38,15 @@ export DX_API_TOKEN=<INSERT API TOKEN HERE>
 ```
 
 In the same directory, begin the download process with this command:
+
+```
+dx-download-agent start . --dryrun
+```
+
+This command will perfrom a series of initial checks but avoid downloads.  These checks include:
+
+* Whether you have enough space locally
+* An estimate for how long it will take to complete your downloads
 
 ```
 dx-download-agent start .
@@ -86,6 +97,7 @@ dx-download-agent status . --detailed-tsv
 
  will output a tab-separated file format to standard output with the following columns:
 
+* DNAnexus project
 * DNAnexus file ID
 * DNAnexus file name
 * Status: in-progress, completed, permanently failed
@@ -109,13 +121,14 @@ After, for example, a system reboot, the user may wish to manually check on the 
 
 ## Manifest file format
 
-The manifest file is a YAML file that is a list of dictionaries. Each dictionary item must have an `id` field at minimum as in the example above, but each item can also have other metadata:
+The manifest file is a YAML file that is a list of dictionaries.
+Each key is a project ID, and each project ID itself has a list of dictionaries containing at minimum a DNAnexus file ID. Specifically, each dictionary item must have an `id` field at minimum as in the example above, but each item can also have other metadata:
 
-* `project`: project ID from which files are to be downloaded
-* `files`: list of dictionaries:
-  * `id` (required): DNAnexus file ID
-  * `name`: File name on DNAnexus (used by `status` command)
-  * `desired_local_path`: Desired local path
+* `project-XXXX`: project ID from which files are to be downloaded
+  * list of dictionaries:
+    * `id` (required): DNAnexus file ID
+    * `name`: File name on DNAnexus (used by `status` command)
+    * `desired_local_path`: Desired local path
 * ...
 
 ## Execution file format
