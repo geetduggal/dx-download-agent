@@ -100,11 +100,12 @@ dx-download-agent status . --detailed-tsv
 * DNAnexus project
 * DNAnexus file ID
 * DNAnexus file name
-* Status: in-progress, completed, permanently failed
+* Status: not started, in-progress, completed, permanently failed
 * Percent downloaded
 * Size downloaded in gigabytes
 * Local path (relative to working directory)
 * Additional info (e.g. reason for permanent failure)
+* MD5 Checksum
 
 
 ## Managing downloads over long periods of time
