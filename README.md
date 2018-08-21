@@ -33,7 +33,7 @@ To start a download process, first [generate a DNAnexus API token](https://wiki.
 export DX_API_TOKEN=<INSERT API TOKEN HERE>
 ```
 
-In the same directory, begin the download process with this command:
+In the same directory, you can probe your environment for download readiness with this command:
 
 ```
 dx-download-agent inspect exome_bams_manifest.json.bz2
@@ -45,6 +45,8 @@ This command will perfrom a series of initial checks but avoid downloads.  These
 * Whether you have enough space locally
 * Approximate speeds of download rates
 * Whether it looks like another download process is running (i.e. file sizes are changing, status files being updated).
+
+To start the download:
 
 ```
 dx-download-agent download exome_bams_manifest.json.bz2
