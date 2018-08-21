@@ -23,8 +23,9 @@ For example, in the current working directory let an uncompressed `manifest.json
         { "size": 5,  "md5": 39239329 }
       ]
     },
+    "..."
   ],
-  "project-BBBB": [ ]
+  "project-BBBB": [ "..." ]
 }
 
 
@@ -45,16 +46,16 @@ This command will perfrom a series of initial checks but avoid downloads.  These
 * Network connectivity and potential issues with it
 * Whether you have enough space locally
 * Approximate speeds of download rates
-* A rough estimate for how long it will take to complete your downloads
+* Whether it looks like another download process is running (i.e. file sizes are changing, status files being updated).
 
 ```
 dx-download-agent download exome_bams.manifest.json.bz2
 Rate: 49.9 KBp/s
 ```
 
-This command will start a download process within your terminal using the current working directory.
+This command will also probe the environment and, if it doesn't appear another download process is running, it will start a download process within your terminal using the current working directory.
 
-Once a download has begun, in a separate terminal, type:
+Once a download has begun, in a separate terminal in the same directory type:
 
 ```
 dx-download-agent progress
