@@ -23,9 +23,8 @@ For example, in the current working directory let an uncompressed `manifest.json
         { "size": 5,  "md5": 39239329 }
       ]
     },
-    # ...
   ],
-  "project-BBBB": [ # ... ]
+  "project-BBBB": [ ]
 }
 
 
