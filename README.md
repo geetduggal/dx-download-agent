@@ -7,9 +7,7 @@ CLI tool to manage the download of large quantities of files from DNAnexus
 
 To get started with `dx-download-agent`, download the the latest pre-compiled binary from the release page.  The download agent accepts two files:
 
-* `manifest_file`: A BZ2-compressed JSON manifest file that describes, at minimimum, a list of DNAnexus file IDs to download
-
-For example, in the current working directory let an uncompressed `manifest.json.bz2` be:
+* `manifest_file`: A BZ2-compressed JSON manifest file that describes, at minimimum, the following information for a download, for example:
 
 ```json
 { 
