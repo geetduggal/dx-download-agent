@@ -36,7 +36,7 @@ export DX_API_TOKEN=<INSERT API TOKEN HERE>
 In the same directory, begin the download process with this command:
 
 ```
-dx-download-agent inspect exomes_bams_manifest.json.bz2
+dx-download-agent inspect exome_bams_manifest.json.bz2
 ```
 
 This command will perfrom a series of initial checks but avoid downloads.  These checks include:
@@ -56,7 +56,7 @@ This command will also probe the environment and, if it doesn't appear another d
 Once a download has begun, in a separate terminal in the same directory type:
 
 ```
-dx-download-agent progress exomes_bams_manifest.json.bz2
+dx-download-agent progress exome_bams_manifest.json.bz2
 ```
 
 and you will get a brief summary of the status the downloads:
