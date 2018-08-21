@@ -29,7 +29,7 @@ For example, in the current working directory let an uncompressed `manifest.json
 }
 ```
 
-To start a download process, first [generate a DNAnexus API token(https://wiki.dnanexus.com/Command-Line-Client/Login-and-Lgout#Authentication-Tokens) that is valid for a time period that you plan on downloading the files.  Store it in the following environment variable:
+To start a download process, first [generate a DNAnexus API token](https://wiki.dnanexus.com/Command-Line-Client/Login-and-Lgout#Authentication-Tokens) that is valid for a time period that you plan on downloading the files.  Store it in the following environment variable:
 
 ```bash
 export DX_API_TOKEN=<INSERT API TOKEN HERE>
