@@ -1,7 +1,6 @@
 package dxda
 
-import "fmt"
-
-func Hello() {
-	fmt.Println("Hello!")
+// Hello - Basic procedure to test function in dxda package
+func Hello() string {
+	return "Hello!"
 }
