@@ -16,6 +16,10 @@ def fileID2manifest(fid, project):
     fdetails['parts'] = {pid: {k:v for k,v in pdetails.items() if k == "md5" or k == "size"} for pid, pdetails in fdetails['parts'].items()}
     return fdetails
 
+def generate_manifest_file(ids, project, outfile):
+  manifest = {project: [fileID2manifest(fid, project) for fid in ids]}
+  with open(outfile, "w") as f:
+    f.write(bz2.compress(json.dumps(manifest, indent=2, sort_keys=True)))
 
 def main():
     parser = argparse.ArgumentParser(description='Create a manifest file from a list of DNAnexus file IDs')
@@ -23,13 +27,9 @@ def main():
     parser.add_argument('--project', help='Project ID: required to speed up API calls', required=True)
     parser.add_argument('--outfile', help='Name of the output file', default='manifest.json.bz2')
 
-
     args = parser.parse_args()
 
-    manifest = {args.project: [fileID2manifest(fid, args.project) for fid in args.id]}
-    with open(args.outfile, "w") as f:
-        f.write(bz2.compress(json.dumps(manifest, indent=2, sort_keys=True)))
-
+    generate_manifest_file(args.id, args.project, args.outfile)
     print("Manifest file written to {}".format(args.outfile))
 
 if __name__ == "__main__":
