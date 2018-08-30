@@ -37,6 +37,9 @@ type DXAuthorization struct {
    If the environment variable DX_API_TOKEN is set, the token is obtained from it
    Otherwise, the token is obtained from the '~/.dnanexus_config/environment.json' file
    If no token can be obtained from these methods, a pair of empty strings is returned
+   If the token was received from the 'DX_API_TOKEN' environment variable, the second variable in the pair
+   will be the string 'environment'.  If it is obtained from a DNAnexus configuration file, the second variable
+   in the pair will be '.dnanexus_config/environment.json'.
 */
 func GetToken() (string, string) {
 	envToken := os.Getenv("DX_API_TOKEN")

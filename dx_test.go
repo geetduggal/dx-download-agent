@@ -17,4 +17,9 @@ func TestGetToken(t *testing.T) {
 	if method != "environment" {
 		t.Errorf(fmt.Sprintf("Expected method of token retreival to be 'environment' but got %s", method))
 	}
+
+	os.Unsetenv("DX_API_TOKEN")
+
+	// Explicitly not testing home directory config file as it may clobber existing login info for executor
+
 }
