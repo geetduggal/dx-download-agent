@@ -1,20 +1,36 @@
 package dxda
 
+// Some inspiration + code snippets taken from https://github.com/dnanexus/precision-fda/blob/master/go/pfda.go
+
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
+	"strings"
+	"time"
+
+	"github.com/hashicorp/go-cleanhttp"     // required by go-retryablehttp
+	"github.com/hashicorp/go-retryablehttp" // use http libraries from hashicorp for implement retry logic
 )
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+func urlFailure(requestType string, url string, status string) {
+	log.Fatalln(fmt.Errorf("%s request to '%s' failed with status %s", requestType, url, status))
+}
 
 // Utilities to interact with the DNAnexus API
 // TODO: Create automatic API wrappers for the dx toolkit
 // e.g. via: https://github.com/dnanexus/dx-toolkit/tree/master/src/api_wrappers
 
-// As much as I love, Go, see https://mholt.github.io/json-to-go/
+// As much as I love Go, see https://mholt.github.io/json-to-go/
 // for auto-generation
 
 // DXConfig - Basic variables regarding DNAnexus environment config
@@ -62,24 +78,52 @@ func GetToken() (string, string) {
 	return "", ""
 }
 
-// GenericDXAPI (WIP) - Function to wrap a generic API call to DNAnexus
-func GenericDXAPI(token, api, payload string) string {
-	client := &http.Client{}
-	var jsonStr = []byte(payload)
-	req, _ := http.NewRequest("POST", fmt.Sprintf("https://api.dnanexus.com/%s", api), bytes.NewBuffer(jsonStr))
-	req.Host = "https://api.dnanexus.com"
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println(err)
+func makeRequestWithHeadersFail(requestType string, url string, headers map[string]string, data []byte) (status string, body []byte) {
+	const minRetryTime = 1  // seconds
+	const maxRetryTime = 30 // seconds
+	const maxRetryCount = 5
+	const userAgent = "DNAnexus Download Agent (v. 0.1)"
+
+	client := &retryablehttp.Client{
+		HTTPClient:   cleanhttp.DefaultClient(),
+		Logger:       log.New(ioutil.Discard, "", 0), // Throw away retryablehttp internal logging
+		RetryWaitMin: minRetryTime * time.Second,
+		RetryWaitMax: maxRetryTime * time.Second,
+		RetryMax:     maxRetryCount,
+		CheckRetry:   retryablehttp.DefaultRetryPolicy,
 	}
+
+	req, err := retryablehttp.NewRequest(requestType, url, bytes.NewReader(data))
+	check(err)
+	for header, value := range headers {
+		req.Header.Set(header, value)
+	}
+
+	resp, err := client.Do(req)
+	check(err)
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	return string(body)
+	status = resp.Status
+	body, _ = ioutil.ReadAll(resp.Body)
+
+	if !strings.HasPrefix(status, "2") {
+		urlFailure(requestType, url, status)
+	}
+	return status, body
+}
+
+// GenericDXAPI (WIP) - Function to wrap a generic API call to DNAnexus
+func GenericDXAPI(token, api string, payload []byte) (status string, body []byte) {
+	headers := map[string]string{
+		"User-Agent":    "DNAnexus Download Client v0.1",
+		"Authorization": fmt.Sprintf("Bearer %s", token),
+		"Content-Type":  "application/json",
+	}
+	url := fmt.Sprintf("https://api.dnanexus.com/%s", api)
+	return makeRequestWithHeadersFail("POST", url, headers, payload)
 }
 
 // WhoAmI - TODO: Should the token be abstracted into a struct that is reused with other methods more like a class?
 func WhoAmI(token string) string {
-	return GenericDXAPI(token, "system/whoami", "{}")
+	_, body := GenericDXAPI(token, "system/whoami", []byte("{}"))
+	return string(body)
 }
