@@ -16,10 +16,10 @@ To get started with `dx-download-agent`, download the the latest pre-compiled bi
       "id": "file-XXXX",
       "name": "foo",
       "folder": "/path/to",
-      "parts": [
-        { "size": 10, "md5": 49302323 },
-        { "size": 5,  "md5": 39239329 }
-      ]
+      "parts": {
+        "1": { "size": 10, "md5": 49302323 },
+        "2": { "size": 5,  "md5": 39239329 }
+      }
     },
     "..."
   ],
