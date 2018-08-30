@@ -62,11 +62,11 @@ func GetToken() (string, string) {
 	return "", ""
 }
 
-// WhoAmI - TODO: Should the token be abstracted into a struct that is reused with other methods more like a class?
-func WhoAmI(token string) string {
+// GenericDXAPI (WIP) - Function to wrap a generic API call to DNAnexus
+func GenericDXAPI(token, api, payload string) string {
 	client := &http.Client{}
-	var jsonStr = []byte("{}")
-	req, _ := http.NewRequest("POST", "https://api.dnanexus.com/system/whoami", bytes.NewBuffer(jsonStr))
+	var jsonStr = []byte(payload)
+	req, _ := http.NewRequest("POST", fmt.Sprintf("https://api.dnanexus.com/%s", api), bytes.NewBuffer(jsonStr))
 	req.Host = "https://api.dnanexus.com"
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
@@ -77,4 +77,9 @@ func WhoAmI(token string) string {
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	return string(body)
+}
+
+// WhoAmI - TODO: Should the token be abstracted into a struct that is reused with other methods more like a class?
+func WhoAmI(token string) string {
+	return GenericDXAPI(token, "system/whoami", "{}")
 }
