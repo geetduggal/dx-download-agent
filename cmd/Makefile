@@ -1,5 +1,4 @@
 all:
-	go get github.com/geetduggal/dx-download-agent
 	go build -x -o dx-download-agent dx-download-agent.go
 
 clean:
