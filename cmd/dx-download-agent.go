@@ -12,4 +12,5 @@ func main() {
 	token, method := dxda.GetToken()
 	fmt.Printf("Obtained token using %s\n", method)
 	fmt.Println(token)
+	fmt.Println(dxda.WhoAmI(token))
 }

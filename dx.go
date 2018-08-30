@@ -1,9 +1,12 @@
 package dxda
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
+	"net/http"
 	"os"
 )
 
@@ -53,7 +56,24 @@ func GetToken() (string, string) {
 		json.Unmarshal(config, &dxconf)
 		var dxauth DXAuthorization
 		json.Unmarshal([]byte(dxconf.DXSECURITYCONTEXT), &dxauth)
-		return dxauth.AuthToken, ".dnanexus_config/environment.json"
+		return dxauth.AuthToken, "~/.dnanexus_config/environment.json"
 	}
 	return "", ""
+}
+
+// WhoAmI - TODO: Should the token be abstracted into a struct that is reused with other methods more like a class?
+func WhoAmI(token string) string {
+	client := &http.Client{}
+	var jsonStr = []byte("{}")
+	req, _ := http.NewRequest("POST", "https://api.dnanexus.com/system/whoami", bytes.NewBuffer(jsonStr))
+	req.Host = "https://api.dnanexus.com"
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	return string(body)
 }
