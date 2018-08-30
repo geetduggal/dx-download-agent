@@ -12,6 +12,7 @@ import (
 
 // Utilities to interact with the DNAnexus API
 // TODO: Create automatic API wrappers for the dx toolkit
+// e.g. via: https://github.com/dnanexus/dx-toolkit/tree/master/src/api_wrappers
 
 // As much as I love, Go, see https://mholt.github.io/json-to-go/
 // for auto-generation
