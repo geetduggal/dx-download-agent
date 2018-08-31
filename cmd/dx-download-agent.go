@@ -12,4 +12,6 @@ func main() {
 	fmt.Printf("Obtained token using %s\n", method)
 	fmt.Println(token)
 	fmt.Println(dxda.WhoAmI(token))
+	manifest := dxda.ReadManifest("../test_files/single_file.manifest.json.bz2")
+	dxda.DownloadManifest(manifest, token)
 }

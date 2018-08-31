@@ -4,12 +4,17 @@ package dxda
 
 import (
 	"bytes"
+	"compress/bzip2"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/go-cleanhttp"     // required by go-retryablehttp
@@ -111,19 +116,116 @@ func makeRequestWithHeadersFail(requestType string, url string, headers map[stri
 	return status, body
 }
 
-// GenericDXAPI (WIP) - Function to wrap a generic API call to DNAnexus
-func GenericDXAPI(token, api string, payload []byte) (status string, body []byte) {
+// DXAPI (WIP) - Function to wrap a generic API call to DNAnexus
+func DXAPI(token, api string, payload string) (status string, body []byte) {
 	headers := map[string]string{
 		"User-Agent":    "DNAnexus Download Client v0.1",
 		"Authorization": fmt.Sprintf("Bearer %s", token),
 		"Content-Type":  "application/json",
 	}
 	url := fmt.Sprintf("https://api.dnanexus.com/%s", api)
-	return makeRequestWithHeadersFail("POST", url, headers, payload)
+	return makeRequestWithHeadersFail("POST", url, headers, []byte(payload))
+}
+
+// TODO: ValidateManifest(manifest) + Tests
+
+// Manifest - core type of manifest file
+type Manifest map[string][]DXFile
+
+// DXFile ...
+type DXFile struct {
+	Folder string            `json:"folder"`
+	ID     string            `json:"id"`
+	Name   string            `json:"name"`
+	Parts  map[string]DXPart `json:"parts"`
+}
+
+// DXPart ...
+type DXPart struct {
+	MD5  string `json:"md5"`
+	Size int    `json:"size"`
+}
+
+// ReadManifest ...
+func ReadManifest(fname string) Manifest {
+	bzdata, err := ioutil.ReadFile(fname)
+	check(err)
+	br := bzip2.NewReader(bytes.NewReader(bzdata))
+	data, err := ioutil.ReadAll(br)
+	check(err)
+	var m Manifest
+	json.Unmarshal(data, &m)
+	return m
+}
+
+// DownloadManifest ...
+func DownloadManifest(m Manifest, token string) {
+	for proj, files := range m {
+		// Every project has an array of files
+		for _, f := range files {
+			DownloadFile(f, proj, token)
+		}
+	}
+}
+
+// DXDownloadURL ...
+type DXDownloadURL struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+}
+
+// DownloadFile ...
+func DownloadFile(f DXFile, project string, token string) {
+	status, body := DXAPI(token, fmt.Sprintf("%s/download", f.ID), "{}")
+	println(status, string(body))
+	var u DXDownloadURL
+	json.Unmarshal(body, &u)
+	err := os.MkdirAll(f.Folder, 0777)
+	check(err)
+	fname := fmt.Sprintf(".%s/%s", f.Folder, f.Name)
+	localf, err := os.Create(fname)
+	localf.Close()
+	var wg sync.WaitGroup
+	for pID := range f.Parts {
+		wg.Add(1)
+		go DownloadPart(f, u, token, fname, pID, project, &wg)
+	}
+	wg.Wait()
+}
+
+func md5str(body []byte) string {
+	hasher := md5.New()
+	hasher.Write(body)
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
+// DownloadPart ...
+func DownloadPart(f DXFile, u DXDownloadURL, token string, fname string, partID string, project string, wg *sync.WaitGroup) {
+	localf, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	defer localf.Close()
+	check(err)
+	fmt.Println(f.Parts[partID])
+	i, err := strconv.Atoi(partID)
+	check(err)
+	partSize := f.Parts["1"].Size
+	headers := map[string]string{
+		"Range": fmt.Sprintf("bytes=%d-%d", (i-1)*partSize, i*partSize-1),
+	}
+	for k, v := range u.Headers {
+		headers[k] = v
+	}
+	_, body := makeRequestWithHeadersFail("GET", u.URL+"/"+project, headers, []byte("{}"))
+	if md5str(body) != f.Parts[partID].MD5 {
+		panic(fmt.Sprintf("MD5 string of part ID %d does not match stored MD5sum: %s", i, f.Parts[partID].MD5))
+	}
+	localf.Seek(int64((i-1)*partSize), 0)
+	localf.Write(body)
+	wg.Done()
+
 }
 
 // WhoAmI - TODO: Should the token be abstracted into a struct that is reused with other methods more like a class?
 func WhoAmI(token string) string {
-	_, body := GenericDXAPI(token, "system/whoami", []byte("{}"))
+	_, body := DXAPI(token, "system/whoami", "{}")
 	return string(body)
 }
