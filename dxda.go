@@ -17,8 +17,11 @@ import (
 	"sync"
 	"time"
 
+	"database/sql"
+
 	"github.com/hashicorp/go-cleanhttp"     // required by go-retryablehttp
 	"github.com/hashicorp/go-retryablehttp" // use http libraries from hashicorp for implement retry logic
+	_ "github.com/mattn/go-sqlite3"         // Following canonical example on go-sqlite3 'simple.go'
 )
 
 func check(e error) {
@@ -158,6 +161,12 @@ func ReadManifest(fname string) Manifest {
 	return m
 }
 
+// DXDownloadURL ...
+type DXDownloadURL struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+}
+
 // DownloadManifest ...
 func DownloadManifest(m Manifest, token string) {
 	for proj, files := range m {
@@ -166,12 +175,6 @@ func DownloadManifest(m Manifest, token string) {
 			DownloadFile(f, proj, token)
 		}
 	}
-}
-
-// DXDownloadURL ...
-type DXDownloadURL struct {
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers"`
 }
 
 // DownloadFile ...
@@ -222,6 +225,145 @@ func DownloadPart(f DXFile, u DXDownloadURL, token string, fname string, partID 
 	localf.Write(body)
 	wg.Done()
 
+}
+
+// DBPart ...
+type DBPart struct {
+	FileID       string
+	Project      string
+	FileName     string
+	Folder       string
+	PartID       int
+	MD5          string
+	Size         int
+	BlockSize    int
+	BytesFetched int
+}
+
+// CreateManifestDB ...
+func CreateManifestDB(fname string) {
+	m := ReadManifest(fname)
+	statsFname := fname + ".stats.db"
+	os.Remove(statsFname)
+	db, err := sql.Open("sqlite3", statsFname)
+	check(err)
+	defer db.Close()
+	sqlStmt := `
+	CREATE TABLE manifest_stats (
+		file_id text, 
+		project text,
+		name text,
+		folder text,
+		part_id integer,
+		md5 text,
+		size integer,
+		block_size integer,
+		bytes_fetched integer
+	);
+	`
+	_, err = db.Exec(sqlStmt)
+	check(err)
+
+	// TODO: May want to convert this to a bulk load?
+	for proj, files := range m {
+		for _, f := range files {
+			for pID := range f.Parts {
+				sqlStmt = fmt.Sprintf(`
+				INSERT INTO manifest_stats
+				VALUES ('%s', '%s', '%s', '%s', %s, '%s', '%d', '%d', '%d');
+				`,
+					f.ID, proj, f.Name, f.Folder, pID, f.Parts[pID].MD5, f.Parts[pID].Size, f.Parts["1"].Size, 0)
+				_, err = db.Exec(sqlStmt)
+				check(err)
+			}
+		}
+	}
+}
+
+// PrepareFilesForDownload ...
+func PrepareFilesForDownload(m Manifest, token string) map[string]DXDownloadURL {
+	urls := make(map[string]DXDownloadURL)
+	for _, files := range m {
+		for _, f := range files {
+
+			// Create directory structure and initialize file if it doesn't exist
+			fname := fmt.Sprintf(".%s/%s", f.Folder, f.Name)
+			if _, err := os.Stat(fname); os.IsNotExist(err) {
+				err := os.MkdirAll(f.Folder, 0777)
+				check(err)
+				localf, err := os.Create(fname)
+				check(err)
+				localf.Close()
+			}
+
+			// Obtain download URL and cache in in-memory map
+			status, body := DXAPI(token, fmt.Sprintf("%s/download", f.ID), "{}")
+			println(status, string(body))
+			var u DXDownloadURL
+			json.Unmarshal(body, &u)
+			urls[f.ID] = u
+		}
+	}
+	return urls
+}
+
+// DownloadManifestDB ...
+func DownloadManifestDB(fname, token string) {
+	m := ReadManifest(fname)
+	urls := PrepareFilesForDownload(m, token)
+	statsFname := fname + ".stats.db"
+
+	db, err := sql.Open("sqlite3", statsFname)
+	check(err)
+	defer db.Close()
+
+	rows, err := db.Query("SELECT * FROM manifest_stats WHERE bytes_fetched != size")
+	check(err)
+	defer rows.Close()
+	var wg sync.WaitGroup
+	for rows.Next() {
+		var p DBPart
+		err = rows.Scan(&p.FileID, &p.Project, &p.FileName, &p.Folder, &p.PartID, &p.MD5, &p.Size, &p.BlockSize, &p.BytesFetched)
+		check(err)
+		fmt.Println(p)
+		wg.Add(1)
+		go DownloadDBPart(fname, p, &wg, urls)
+	}
+	wg.Wait()
+}
+
+// UpdateDBPart ...
+func UpdateDBPart(manifestFileName string, p DBPart) {
+	statsFname := manifestFileName + ".stats.db"
+	db, err := sql.Open("sqlite3", statsFname)
+	check(err)
+	defer db.Close()
+	_, err = db.Exec(fmt.Sprintf("UPDATE manifest_stats SET bytes_fetched = %d WHERE file_id = '%s' AND part_id = '%d'", p.Size, p.FileID, p.PartID))
+	check(err)
+}
+
+// DownloadDBPart ...
+func DownloadDBPart(manifestFileName string, p DBPart, wg *sync.WaitGroup, urls map[string]DXDownloadURL) {
+	fname := fmt.Sprintf(".%s/%s", p.Folder, p.FileName)
+	localf, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
+	defer localf.Close()
+	check(err)
+	headers := map[string]string{
+		// TODO modify ranges for for last part for ostensible correctness (works regardless in practice)
+		"Range": fmt.Sprintf("bytes=%d-%d", (p.PartID-1)*p.BlockSize, p.PartID*p.BlockSize-1),
+	}
+	u := urls[p.FileID]
+	for k, v := range u.Headers {
+		headers[k] = v
+	}
+	_, body := makeRequestWithHeadersFail("GET", u.URL+"/"+p.Project, headers, []byte("{}"))
+	if md5str(body) != p.MD5 {
+		panic(fmt.Sprintf("MD5 string of part ID %d does not match stored MD5sum", p.PartID))
+	}
+	localf.Seek(int64((p.PartID-1)*p.BlockSize), 0)
+	localf.Write(body)
+	UpdateDBPart(manifestFileName, p)
+	wg.Done()
 }
 
 // WhoAmI - TODO: Should the token be abstracted into a struct that is reused with other methods more like a class?

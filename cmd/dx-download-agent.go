@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+
 	// The dxda package should contain all core functionality
 	"github.com/geetduggal/dxda"
 )
@@ -12,6 +14,11 @@ func main() {
 	fmt.Printf("Obtained token using %s\n", method)
 	fmt.Println(token)
 	fmt.Println(dxda.WhoAmI(token))
-	manifest := dxda.ReadManifest("../test_files/single_file.manifest.json.bz2")
-	dxda.DownloadManifest(manifest, token)
+	fname := "../test_files/single_file.manifest.json.bz2"
+	// manifest := dxda.ReadManifest()
+	// dxda.DownloadManifest(manifest, token)
+	if _, err := os.Stat(fname + ".stats.db"); os.IsNotExist(err) {
+		dxda.CreateManifestDB(fname)
+	}
+	dxda.DownloadManifestDB(fname, token)
 }
