@@ -1,2 +1,4 @@
 dx-download-agent
 single_file.bin
+.vscode/tasks.json
+test_files/single_file.manifest.json.bz2.stats.db

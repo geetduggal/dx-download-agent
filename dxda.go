@@ -12,7 +12,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -167,64 +166,10 @@ type DXDownloadURL struct {
 	Headers map[string]string `json:"headers"`
 }
 
-// DownloadManifest ...
-func DownloadManifest(m Manifest, token string) {
-	for proj, files := range m {
-		// Every project has an array of files
-		for _, f := range files {
-			DownloadFile(f, proj, token)
-		}
-	}
-}
-
-// DownloadFile ...
-func DownloadFile(f DXFile, project string, token string) {
-	status, body := DXAPI(token, fmt.Sprintf("%s/download", f.ID), "{}")
-	println(status, string(body))
-	var u DXDownloadURL
-	json.Unmarshal(body, &u)
-	err := os.MkdirAll(f.Folder, 0777)
-	check(err)
-	fname := fmt.Sprintf(".%s/%s", f.Folder, f.Name)
-	localf, err := os.Create(fname)
-	localf.Close()
-	var wg sync.WaitGroup
-	for pID := range f.Parts {
-		wg.Add(1)
-		go DownloadPart(f, u, token, fname, pID, project, &wg)
-	}
-	wg.Wait()
-}
-
 func md5str(body []byte) string {
 	hasher := md5.New()
 	hasher.Write(body)
 	return hex.EncodeToString(hasher.Sum(nil))
-}
-
-// DownloadPart ...
-func DownloadPart(f DXFile, u DXDownloadURL, token string, fname string, partID string, project string, wg *sync.WaitGroup) {
-	localf, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
-	defer localf.Close()
-	check(err)
-	fmt.Println(f.Parts[partID])
-	i, err := strconv.Atoi(partID)
-	check(err)
-	partSize := f.Parts["1"].Size
-	headers := map[string]string{
-		"Range": fmt.Sprintf("bytes=%d-%d", (i-1)*partSize, i*partSize-1),
-	}
-	for k, v := range u.Headers {
-		headers[k] = v
-	}
-	_, body := makeRequestWithHeadersFail("GET", u.URL+"/"+project, headers, []byte("{}"))
-	if md5str(body) != f.Parts[partID].MD5 {
-		panic(fmt.Sprintf("MD5 string of part ID %d does not match stored MD5sum: %s", i, f.Parts[partID].MD5))
-	}
-	localf.Seek(int64((i-1)*partSize), 0)
-	localf.Write(body)
-	wg.Done()
-
 }
 
 // DBPart ...
