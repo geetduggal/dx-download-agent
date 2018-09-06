@@ -193,6 +193,7 @@ func CreateManifestDB(fname string) {
 	db, err := sql.Open("sqlite3", statsFname)
 	check(err)
 	defer db.Close()
+	check(err)
 	sqlStmt := `
 	CREATE TABLE manifest_stats (
 		file_id text, 
@@ -252,6 +253,26 @@ func PrepareFilesForDownload(m Manifest, token string) map[string]DXDownloadURL 
 	return urls
 }
 
+// JobInfo ...
+type JobInfo struct {
+	manifestFileName string
+	part             DBPart
+	wg               *sync.WaitGroup
+	urls             map[string]DXDownloadURL
+	tmpid            int
+}
+
+func worker(id int, jobs <-chan JobInfo) {
+	var wg *sync.WaitGroup
+	for j := range jobs {
+		wg = j.wg
+		//fmt.Println("worker", id, "started  job", j.tmpid)
+		DownloadDBPart(j.manifestFileName, j.part, j.wg, j.urls)
+		//fmt.Println("worker", id, "finished job", j.tmpid, j.part.PartID)
+	}
+	wg.Done()
+}
+
 // DownloadManifestDB ...
 func DownloadManifestDB(fname, token string) {
 	m := ReadManifest(fname)
@@ -260,29 +281,53 @@ func DownloadManifestDB(fname, token string) {
 
 	db, err := sql.Open("sqlite3", statsFname)
 	check(err)
-	defer db.Close()
 
-	rows, err := db.Query("SELECT * FROM manifest_stats WHERE bytes_fetched != size")
+	rows, err := db.Query("SELECT COUNT(*) FROM manifest_stats WHERE bytes_fetched != size")
 	check(err)
-	defer rows.Close()
+	var cnt int
+	rows.Next()
+	rows.Scan(&cnt)
+	rows.Close()
+	fmt.Println("# Parts left to download", cnt)
+	rows, err = db.Query("SELECT * FROM manifest_stats WHERE bytes_fetched != size")
+	check(err)
+
+	jobs := make(chan JobInfo, cnt)
+
 	var wg sync.WaitGroup
-	for rows.Next() {
+
+	for i := 1; rows.Next(); i++ {
 		var p DBPart
 		err = rows.Scan(&p.FileID, &p.Project, &p.FileName, &p.Folder, &p.PartID, &p.MD5, &p.Size, &p.BlockSize, &p.BytesFetched)
 		check(err)
 		fmt.Println(p)
+		var j JobInfo
+		j.manifestFileName = fname
+		j.part = p
+		j.wg = &wg
+		j.urls = urls
+		j.tmpid = i
+		jobs <- j
+	}
+	close(jobs)
+	rows.Close()
+	db.Close()
+
+	for w := 1; w <= 5; w++ {
 		wg.Add(1)
-		go DownloadDBPart(fname, p, &wg, urls)
+		go worker(w, jobs)
 	}
 	wg.Wait()
+
 }
 
 // UpdateDBPart ...
 func UpdateDBPart(manifestFileName string, p DBPart) {
-	statsFname := manifestFileName + ".stats.db"
+	statsFname := manifestFileName + ".stats.db?cache=shared&mode=rwc"
 	db, err := sql.Open("sqlite3", statsFname)
 	check(err)
 	defer db.Close()
+	check(err)
 	_, err = db.Exec(fmt.Sprintf("UPDATE manifest_stats SET bytes_fetched = %d WHERE file_id = '%s' AND part_id = '%d'", p.Size, p.FileID, p.PartID))
 	check(err)
 }
@@ -290,8 +335,7 @@ func UpdateDBPart(manifestFileName string, p DBPart) {
 // DownloadDBPart ...
 func DownloadDBPart(manifestFileName string, p DBPart, wg *sync.WaitGroup, urls map[string]DXDownloadURL) {
 	fname := fmt.Sprintf(".%s/%s", p.Folder, p.FileName)
-	localf, err := os.OpenFile(fname, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0777)
-	defer localf.Close()
+	localf, err := os.OpenFile(fname, os.O_WRONLY, 0777)
 	check(err)
 	headers := map[string]string{
 		// TODO modify ranges for for last part for ostensible correctness (works regardless in practice)
@@ -305,10 +349,12 @@ func DownloadDBPart(manifestFileName string, p DBPart, wg *sync.WaitGroup, urls 
 	if md5str(body) != p.MD5 {
 		panic(fmt.Sprintf("MD5 string of part ID %d does not match stored MD5sum", p.PartID))
 	}
-	localf.Seek(int64((p.PartID-1)*p.BlockSize), 0)
-	localf.Write(body)
+	_, err = localf.Seek(int64((p.PartID-1)*p.BlockSize), 0)
+	check(err)
+	_, err = localf.Write(body)
+	check(err)
+	localf.Close()
 	UpdateDBPart(manifestFileName, p)
-	wg.Done()
 }
 
 // WhoAmI - TODO: Should the token be abstracted into a struct that is reused with other methods more like a class?
