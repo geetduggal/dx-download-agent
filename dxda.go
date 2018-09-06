@@ -230,6 +230,7 @@ func CreateManifestDB(fname string) {
 }
 
 // PrepareFilesForDownload ...
+// TODO: Optimize this for only files that need to be downloaded
 func PrepareFilesForDownload(m Manifest, token string) map[string]DXDownloadURL {
 	urls := make(map[string]DXDownloadURL)
 	for _, files := range m {
@@ -244,12 +245,6 @@ func PrepareFilesForDownload(m Manifest, token string) map[string]DXDownloadURL 
 				check(err)
 				localf.Close()
 			}
-
-			// Obtain download URL and cache in in-memory map
-			_, body := DXAPI(token, fmt.Sprintf("%s/download", f.ID), "{}")
-			var u DXDownloadURL
-			json.Unmarshal(body, &u)
-			urls[f.ID] = u
 		}
 	}
 	return urls
@@ -294,10 +289,19 @@ func DownloadProgress(fname string) string {
 	return fmt.Sprintf("%d/%d MB\t%d/%d Parts Downloaded", b2MB(numBytesComplete), b2MB(numBytes), numPartsComplete, numParts)
 }
 
-func worker(id int, jobs <-chan JobInfo) {
+func worker(id int, jobs <-chan JobInfo, token string, mutex *sync.Mutex) {
 	var wg *sync.WaitGroup
 	for j := range jobs {
 		wg = j.wg
+		if _, ok := j.urls[j.part.FileID]; !ok {
+			payload := fmt.Sprintf("{\"project\": \"%s\"}", j.part.Project)
+			_, body := DXAPI(token, fmt.Sprintf("%s/download", j.part.FileID), payload)
+			var u DXDownloadURL
+			json.Unmarshal(body, &u)
+			mutex.Lock()
+			j.urls[j.part.FileID] = u
+			mutex.Unlock()
+		}
 		DownloadDBPart(j.manifestFileName, j.part, j.wg, j.urls)
 		fmt.Printf("%s\r", DownloadProgress(j.manifestFileName))
 	}
@@ -336,12 +340,13 @@ func DownloadManifestDB(fname, token string, opts Opts) {
 	rows.Close()
 	db.Close()
 
+	var mutex = &sync.Mutex{}
 	for w := 1; w <= opts.NumThreads; w++ {
 		wg.Add(1)
-		go worker(w, jobs)
+		go worker(w, jobs, token, mutex)
 	}
 	wg.Wait()
-
+	fmt.Println("")
 }
 
 // UpdateDBPart ...
