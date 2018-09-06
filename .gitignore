@@ -2,3 +2,4 @@ dx-download-agent
 .vscode/tasks.json
 *.bin
 *.stats.db
+.DS_Store
