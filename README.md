@@ -50,27 +50,27 @@ To start the download:
 
 ```
 dx-download-agent download exome_bams_manifest.json.bz2
-Rate: 49.9 KBp/s
+Obtained token using ~/.dnanexus_config/environment.json
+100/200 MB      11/17 Parts Downloaded
 ```
 
 This command will also probe the environment and, if it doesn't appear another download process is running, it will start a download process within your terminal using the current working directory.
 
-Once a download has begun, in a separate terminal in the same directory type:
+You can query the progress of an existing download in a separate terminal
 
 ```
-dx-download-agent progress exome_bams_manifest.json.bz2
+dx-download-agent progress exome_bams_manifest.json.bz2 
 ```
 
 and you will get a brief summary of the status the downloads:
 
 ```
-95/1056 Mb (9%)
+100/200 MB      11/17 Parts Downloaded
 ```
 
 ## Execution options
 
 * `--max_threads` (integer): maximum # of concurrent threads to use when downloading files
-* `--max_bandwidth`: (integer) Maximum download bandwidth of all files in KBp/s
 * ...
 
 
