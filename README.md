@@ -33,6 +33,8 @@ To start a download process, first [generate a DNAnexus API token](https://wiki.
 export DX_API_TOKEN=<INSERT API TOKEN HERE>
 ```
 
+If no API token is provided, the download agent will look to the `~/.dnanexus_config/environment.json` also used by the [dx-toolkit](https://github.com/dnanexus/dx-toolkit),
+
 In the same directory, you can probe your environment for download readiness with this command:
 
 ```

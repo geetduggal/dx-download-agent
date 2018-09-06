@@ -2,7 +2,7 @@ package dxda
 
 // Some inspiration + code snippets taken from https://github.com/dnanexus/precision-fda/blob/master/go/pfda.go
 
-// TODO: More code cleanup/consistency with best Go practices, add more unit tests, setup deeper integration tests
+// TODO: Some more code cleanup + consistency with best Go practices, add more unit tests, setup deeper integration tests, add build notes
 import (
 	"bytes"
 	"compress/bzip2"
@@ -378,10 +378,4 @@ func DownloadDBPart(manifestFileName string, p DBPart, wg *sync.WaitGroup, urls 
 	check(err)
 	localf.Close()
 	UpdateDBPart(manifestFileName, p)
-}
-
-// WhoAmI - TODO: Should the token be abstracted into a struct that is reused with other methods more like a class?
-func WhoAmI(token string) string {
-	_, body := DXAPI(token, "system/whoami", "{}")
-	return string(body)
 }
