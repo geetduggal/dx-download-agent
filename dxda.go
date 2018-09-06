@@ -2,6 +2,7 @@ package dxda
 
 // Some inspiration + code snippets taken from https://github.com/dnanexus/precision-fda/blob/master/go/pfda.go
 
+// TODO: More code cleanup/consistency with best Go practices, add more unit tests, setup deeper integration tests
 import (
 	"bytes"
 	"compress/bzip2"
@@ -37,8 +38,10 @@ func urlFailure(requestType string, url string, status string) {
 // TODO: Create automatic API wrappers for the dx toolkit
 // e.g. via: https://github.com/dnanexus/dx-toolkit/tree/master/src/api_wrappers
 
-// As much as I love Go, see https://mholt.github.io/json-to-go/
-// for auto-generation
+// Opts ...
+type Opts struct {
+	NumThreads int // # of workers to process downloads
+}
 
 // DXConfig - Basic variables regarding DNAnexus environment config
 type DXConfig struct {
@@ -86,9 +89,9 @@ func GetToken() (string, string) {
 }
 
 func makeRequestWithHeadersFail(requestType string, url string, headers map[string]string, data []byte) (status string, body []byte) {
-	const minRetryTime = 1  // seconds
-	const maxRetryTime = 30 // seconds
-	const maxRetryCount = 5
+	const minRetryTime = 1   // seconds
+	const maxRetryTime = 120 // seconds
+	const maxRetryCount = 10
 	const userAgent = "DNAnexus Download Agent (v. 0.1)"
 
 	client := &retryablehttp.Client{
@@ -243,8 +246,7 @@ func PrepareFilesForDownload(m Manifest, token string) map[string]DXDownloadURL 
 			}
 
 			// Obtain download URL and cache in in-memory map
-			status, body := DXAPI(token, fmt.Sprintf("%s/download", f.ID), "{}")
-			println(status, string(body))
+			_, body := DXAPI(token, fmt.Sprintf("%s/download", f.ID), "{}")
 			var u DXDownloadURL
 			json.Unmarshal(body, &u)
 			urls[f.ID] = u
@@ -262,35 +264,57 @@ type JobInfo struct {
 	tmpid            int
 }
 
+// Probably a better way to do this :)
+func queryDBIntegerResult(query, dbFname string) int {
+	db, err := sql.Open("sqlite3", dbFname)
+	check(err)
+
+	rows, err := db.Query(query)
+	check(err)
+	var cnt int
+	rows.Next()
+	rows.Scan(&cnt)
+	rows.Close()
+	return cnt
+}
+
+func b2MB(bytes int) int { return bytes / 1000000 }
+
+// DownloadProgress ...
+func DownloadProgress(fname string) string {
+	// TODO: memoize totals so DB is not re-queried
+
+	dbFname := fname + ".stats.db"
+	numPartsComplete := queryDBIntegerResult("SELECT COUNT(*) FROM manifest_stats WHERE bytes_fetched = size", dbFname)
+	numParts := queryDBIntegerResult("SELECT COUNT(*) FROM manifest_stats", dbFname)
+
+	numBytesComplete := queryDBIntegerResult("SELECT SUM(bytes_fetched) FROM manifest_stats WHERE bytes_fetched = size", dbFname)
+	numBytes := queryDBIntegerResult("SELECT SUM(size) FROM manifest_stats", dbFname)
+
+	return fmt.Sprintf("%d/%d MB\t%d/%d Parts Downloaded", b2MB(numBytesComplete), b2MB(numBytes), numPartsComplete, numParts)
+}
+
 func worker(id int, jobs <-chan JobInfo) {
 	var wg *sync.WaitGroup
 	for j := range jobs {
 		wg = j.wg
-		//fmt.Println("worker", id, "started  job", j.tmpid)
 		DownloadDBPart(j.manifestFileName, j.part, j.wg, j.urls)
-		//fmt.Println("worker", id, "finished job", j.tmpid, j.part.PartID)
+		fmt.Printf("%s\r", DownloadProgress(j.manifestFileName))
 	}
 	wg.Done()
 }
 
 // DownloadManifestDB ...
-func DownloadManifestDB(fname, token string) {
+func DownloadManifestDB(fname, token string, opts Opts) {
 	m := ReadManifest(fname)
 	urls := PrepareFilesForDownload(m, token)
 	statsFname := fname + ".stats.db"
 
 	db, err := sql.Open("sqlite3", statsFname)
 	check(err)
-
-	rows, err := db.Query("SELECT COUNT(*) FROM manifest_stats WHERE bytes_fetched != size")
+	cnt := queryDBIntegerResult("SELECT COUNT(*) FROM manifest_stats WHERE bytes_fetched != size", statsFname)
 	check(err)
-	var cnt int
-	rows.Next()
-	rows.Scan(&cnt)
-	rows.Close()
-	fmt.Println("# Parts left to download", cnt)
-	rows, err = db.Query("SELECT * FROM manifest_stats WHERE bytes_fetched != size")
-	check(err)
+	rows, err := db.Query("SELECT * FROM manifest_stats WHERE bytes_fetched != size")
 
 	jobs := make(chan JobInfo, cnt)
 
@@ -300,7 +324,6 @@ func DownloadManifestDB(fname, token string) {
 		var p DBPart
 		err = rows.Scan(&p.FileID, &p.Project, &p.FileName, &p.Folder, &p.PartID, &p.MD5, &p.Size, &p.BlockSize, &p.BytesFetched)
 		check(err)
-		fmt.Println(p)
 		var j JobInfo
 		j.manifestFileName = fname
 		j.part = p
@@ -313,7 +336,7 @@ func DownloadManifestDB(fname, token string) {
 	rows.Close()
 	db.Close()
 
-	for w := 1; w <= 5; w++ {
+	for w := 1; w <= opts.NumThreads; w++ {
 		wg.Add(1)
 		go worker(w, jobs)
 	}
