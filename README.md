@@ -1,3 +1,9 @@
+**Please see github.com/dnanexus/dxda for the latest version of this tool.  This repository is here simply for historical purposes.**
+
+
+----
+
+
 # dx-download-agent
 CLI tool to manage the download of large quantities of files from DNAnexus
 
